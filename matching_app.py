@@ -62,19 +62,23 @@ if submit_button:
         # Standardize addresses
         dataset_1['Address'] = dataset_1['Address'].apply(standardize_address)
         dataset_2['Address'] = dataset_2['Address'].apply(standardize_address)
+        matches_df = find_best_matches(dataset_2, dataset_1)
 
 
 
-        # Example of applying the updated function to all rows in dataset_2 and updating the mobile column
-        results = dataset_2.apply(lambda x: combined_matching(x['Address'], x["Owner's Name"], dataset_1), axis=1)
+    # Example of applying the updated function to all rows in dataset_2 and updating the mobile column
+        #results = dataset_2.apply(lambda x: combined_matching(x['Address'], x["Owner's Name"], dataset_1), axis=1)
+        #address_scores, name_scores = precompute_scores(dataset_1)
+
+
 
         # Assuming dataset_2 already has a 'Mobile' column you want to update
-        dataset_2[['Best Match Address', 'Address Score', 'Best Match Name', 'Name Score', 'Combined Score', 'Mobile']] = pd.DataFrame(results.tolist(), index=dataset_2.index)
-
+        dataset_2[['Best Match Address', 'Best Match Name', 'Combined Score', 'Mobile']] = matches_df[['Best Match Address', 'Best Match Name', 'Combined Score', 'Mobile']]
+        #dataset_2['Combined Score'] = dataset_2['Address Score'] * dataset_2['Name Score']
 
         dataset_2['Combined Score'] = normalize_combined_score(dataset_2['Combined Score'])
         dataset_2['Confidence'] = dataset_2['Combined Score'].apply(confidence)
-        dataset_2 = dataset_2.drop(['Address Score', 'Name Score'], axis=1)
+        #dataset_2 = dataset_2.drop(['Address Score', 'Name Score'], axis=1)
 
 
 
