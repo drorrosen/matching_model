@@ -6,6 +6,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 import numpy as np
 import re
 from io import BytesIO
+from rapidfuzz import process
 
 
 
@@ -121,7 +122,7 @@ def combined_matching(target_address, target_name, lookout_dataset):
     highest_name_score_for_best_address = 0  # Score for the name corresponding to the best address match
 
     # First, find the best address match
-    for _, row in lookout_dataset.iterrows():
+    for _, row in lookout_dataset.itertuples():
         address_score = fuzz.ratio(target_address, row['Address']) / 100
 
         if address_score > highest_address_score:
@@ -130,6 +131,9 @@ def combined_matching(target_address, target_name, lookout_dataset):
             best_name_match_for_best_address = row['Full Name']
             highest_name_score_for_best_address = fuzz.ratio(target_name, row['Last Name']) / 100
             best_mobile_number_for_best_address = row['Mobile']  # Capture the mobile number
+
+            if address_score*highest_name_score_for_best_address > 0.7:
+                break
 
     combined_score = highest_address_score * highest_name_score_for_best_address
 
@@ -174,3 +178,88 @@ def create_styled_excel(df, confidence_col_index):
     # Rewind the buffer
     output.seek(0)
     return output
+
+
+
+# Precompute the scoring matrix for the lookout_dataset
+def precompute_scores(target_address, target_name, lookout_dataset):
+    # Assuming lookout_dataset is a DataFrame with 'Address' and 'Full Name'
+    # Convert the address and name columns to lists for processing.
+    addresses = lookout_dataset['Address'].tolist()
+    names = lookout_dataset['Full Name'].tolist()
+
+    # Precompute the scores as dictionaries if the list of unique values is smaller than the dataset
+    address_scores = {address: fuzz.ratio(target_address, address) for address in set(addresses)}
+    name_scores = {name: fuzz.ratio(target_name, name) for name in set(names)}
+
+    return address_scores, name_scores
+
+
+# Optimized combined_matching function
+def optimized_combined_matching(target_address, target_name, address_scores, name_scores, lookout_dataset):
+    best_address = max(address_scores, key=address_scores.get)
+    highest_address_score = address_scores[best_address]
+
+    # Extract best name match for the best address
+    corresponding_name = lookout_dataset[lookout_dataset['Address'] == best_address]['Full Name'].iloc[0]
+    highest_name_score = name_scores[corresponding_name]
+
+    # Get mobile number for the best address match
+    best_mobile_number_for_best_address = lookout_dataset[lookout_dataset['Address'] == best_address]['Mobile'].iloc[0]
+
+    combined_score = highest_address_score * highest_name_score
+
+    return best_address, highest_address_score, corresponding_name, highest_name_score, combined_score, best_mobile_number_for_best_address
+
+
+
+
+# Assuming dataset1 is your lookup dataset and dataset2 is your target dataset.
+
+def find_best_matches(target_dataset, lookup_dataset):
+    results = []
+
+    # Preparing the lookup lists from the lookup dataset
+    lookup_addresses = lookup_dataset['Address'].tolist()
+    lookup_names = lookup_dataset['Full Name'].tolist()  # Ensure this is correct based on your dataset structure
+
+    for index, row in target_dataset.iterrows():
+        target_address = row['Address']
+        target_name = row["Owner's Name"]
+
+        # Find the best match for the address in lookup_dataset
+        best_address_match = process.extractOne(target_address, lookup_addresses, scorer=fuzz.ratio)
+
+        if best_address_match:
+            # Retrieve the best address match details
+            best_address_score = best_address_match[1]
+            best_address_index = best_address_match[2]
+            best_matched_address = lookup_dataset.iloc[best_address_index]
+
+            # Now match the owner's name only within the context of the matched address
+            # Assuming the best name should be matched within the same record as the best address
+            best_name_score = fuzz.ratio(target_name, best_matched_address['Last Name'])
+
+            results.append({
+                'Best Match Address': best_matched_address['Address'],
+                'Combined Score': float(best_address_score) * float(best_name_score)/10000,
+                'Best Match Name': best_matched_address['Full Name'],
+                'Mobile': best_matched_address['Mobile'],
+            })
+        else:
+            # Append none or default values if no address match is found
+            results.append({
+                'Best Match Address': 'none',
+                'Combined Score': 0,
+                'Best Match Name': 'none',
+                'Mobile': 'none',
+            })
+
+    return pd.DataFrame(results)
+
+# Ensure that dataset1 and dataset2 are defined and structured correctly before calling this function
+
+# Example usage:
+#matches_df = find_best_matches(dataset2, dataset1)
+
+# Now 'matches_df' contains the best matches from the lookup dataset for each entry in the target dataset.
