@@ -1,12 +1,11 @@
 import pandas as pd
-from rapidfuzz import fuzz
+from rapidfuzz import fuzz,process
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 from openpyxl.utils.dataframe import dataframe_to_rows
 import numpy as np
 import re
 from io import BytesIO
-from rapidfuzz import process
 
 
 
@@ -263,3 +262,10 @@ def find_best_matches(target_dataset, lookup_dataset):
 #matches_df = find_best_matches(dataset2, dataset1)
 
 # Now 'matches_df' contains the best matches from the lookup dataset for each entry in the target dataset.
+
+
+def standardize_mobile_v2(mobile):
+    if pd.notna(mobile):
+        mobile_str = str(mobile)
+        return ''.join(filter(str.isdigit, mobile_str))
+    return None
